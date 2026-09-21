@@ -2,7 +2,6 @@ import streamlit as st
 import tempfile
 import os
 import zipfile
-from sync_format_tool import run
 
 st.set_page_config(page_title="Transcript Sync Tool", layout="centered")
 
