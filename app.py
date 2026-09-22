@@ -30,6 +30,15 @@ if isinstance(result, dict) and "errors" in result:
     st.stop()
 
 st.success("✅ File processed successfully!")
+# ✅ Preview output (first few paragraphs)
+doc = Document(output_path)
+
+preview_text = []
+for para in doc.paragraphs[:10]:  # first 10 paragraphs
+    preview_text.append(para.text)
+
+st.subheader("📄 Preview")
+st.code("\n".join(preview_text))
 
         with open(output_path, "rb") as f:
             st.download_button("Download Output", f, file_name="output.docx")
