@@ -12,34 +12,46 @@ media_name = st.text_input("Media Name")
 offset = st.text_input("Offset (HH:MM:SS:FF)")
 fps = st.number_input("FPS", value=25)
 
+# ⚠️ Offset validation warning
 if offset and not validate_offset(offset):
     st.warning("⚠️ Offset format should be HH:MM:SS:FF")
+
 if st.button("Process"):
-    if uploaded_file:
+    if not uploaded_file:
+        st.error("Please upload a file")
+    else:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
             tmp.write(uploaded_file.read())
             input_path = tmp.name
 
-            output_path = input_path.replace(".docx", "_output.docx")
-            result = run(input_path, output_path, media_name, offset, fps)
+        output_path = input_path.replace(".docx", "_output.docx")
 
-# ✅ Show errors in UI
-if isinstance(result, dict) and "errors" in result:
-    st.error("❌ Errors found:")
-    for err in result["errors"]:
-        st.write(f"- {err}")
-    st.stop()
+        result = run(input_path, output_path, media_name, offset, fps)
 
-st.success("✅ File processed successfully!")
-# ✅ Preview output (first few paragraphs)
-doc = Document(output_path)
+        # ✅ Show errors in UI
+        if isinstance(result, dict) and "errors" in result:
+            st.error("❌ Errors found:")
+            for err in result["errors"]:
+                st.write(f"- {err}")
+            st.stop()
 
-preview_text = []
-for para in doc.paragraphs[:10]:  # first 10 paragraphs
-    preview_text.append(para.text)
+        # ✅ Success
+        st.success("✅ File processed successfully!")
 
-st.subheader("📄 Preview")
-st.code("\n".join(preview_text))
+        # ✅ Preview output
+        doc = Document(output_path)
+        preview_text = []
 
-with open(output_path, "rb") as f:
-    st.download_button("Download Output", f, file_name="output.docx")
+        for para in doc.paragraphs[:10]:
+            preview_text.append(para.text)
+
+        st.subheader("📄 Preview")
+        st.text("\n".join(preview_text))
+
+        # ✅ Download
+        with open(output_path, "rb") as f:
+            st.download_button(
+                "Download Output",
+                f,
+                file_name="output.docx"
+            )
