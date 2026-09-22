@@ -19,7 +19,16 @@ if st.button("Process"):
 
         output_path = input_path.replace(".docx", "_output.docx")
 
-        run(input_path, output_path, media_name, offset, fps)
+       result = run(input_path, output_path, media_name, offset, fps)
+
+# ✅ Show errors in UI
+if isinstance(result, dict) and "errors" in result:
+    st.error("❌ Errors found:")
+    for err in result["errors"]:
+        st.write(f"- {err}")
+    st.stop()
+
+st.success("✅ File processed successfully!")
 
         with open(output_path, "rb") as f:
             st.download_button("Download Output", f, file_name="output.docx")
