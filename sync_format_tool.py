@@ -240,7 +240,29 @@ def build_output_doc(entries, media_name, offset, fps,
         doc.add_paragraph("")  # spacer between blocks
 
     return doc
+def run_qc_checks(entries):
+    errors = []
+    prev_time = None
 
+    for i, (raw_tc, raw_frames, speaker, text) in enumerate(entries):
+        h, m, s = raw_tc
+
+        if raw_tc is None:
+            errors.append(f"Line {i+1}: Missing timestamp")
+
+        if not speaker or speaker.strip() == "":
+            errors.append(f"Line {i+1}: Empty speaker")
+
+        if h > 23 or m > 59 or s > 59:
+            errors.append(f"Line {i+1}: Invalid SMPTE time {h}:{m}:{s}")
+
+        current_time = h*3600 + m*60 + s
+        if prev_time is not None and current_time < prev_time:
+            errors.append(f"Line {i+1}: Time overlap detected")
+
+        prev_time = current_time
+
+    return errors
 
 def run(input_path, output_path, media_name, offset_str, fps=30, speakers=None,
         running_header_label="Transcription Media #", body_label="MEDIA #:",
@@ -255,6 +277,12 @@ def run(input_path, output_path, media_name, offset_str, fps=30, speakers=None,
 
     entries, leftover = extract_segments(paragraphs, known_speakers=known,
                                           merge_bundled=merge_bundled)
+            qc_errors = run_qc_checks(entries)
+
+if qc_errors:
+    return {"errors": qc_errors}
+
+
     if leftover:
         print(f"WARNING: {len(leftover)} trailing dialogue segment(s) had no "
               f"following timecode and were skipped:")
