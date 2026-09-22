@@ -18,40 +18,40 @@ def parse_offset(offset_str):
 
 
 # ==============================
-# ✅ TIMECODE FIX (AUTO CORRECTION)
+# ✅ TIMECODE OFFSET
 # ==============================
-def apply_offset(tc, offset):
+def offset_timecode(tc, offset, fps):
     parts = tc.split(":")
 
-    # ✅ Fix missing frames (HH:MM:SS → HH:MM:SS:00)
+    # Fix missing frames
     if len(parts) == 3:
         parts.append("00")
 
-    h, m, s, f = map(int, parts)
+    try:
+        h, m, s, f = map(int, parts)
+    except:
+        return tc  # return original if bad format
 
     oh, om, os, of = offset
 
-    total_frames = (h*3600 + m*60 + s)*25 + f
-    offset_frames = (oh*3600 + om*60 + os)*25 + of
+    total_frames = ((h*3600 + m*60 + s) * fps + f)
+    offset_frames = ((oh*3600 + om*60 + os) * fps + of)
 
     new_total = total_frames + offset_frames
 
-    new_s = new_total // 25
-    new_f = new_total % 25
+    nh = new_total // (3600 * fps)
+    nm = (new_total % (3600 * fps)) // (60 * fps)
+    ns = (new_total % (60 * fps)) // fps
+    nf = new_total % fps
 
-    new_h = new_s // 3600
-    new_s %= 3600
-    new_m = new_s // 60
-    new_s %= 60
-
-    return f"{new_h}:{new_m:02}:{new_s:02}:{new_f:02}"
+    return f"{nh:02}:{nm:02}:{ns:02}:{nf:02}"
 
 
 # ==============================
-# ✅ SPEAKER AUTO DETECTION
+# ✅ SPEAKER DETECTION
 # ==============================
-def detect_speaker(line):
-    match = re.match(r"^([A-Za-z ]+):", line)
+def detect_speaker(text):
+    match = re.match(r"^([A-Za-z :]+):", text)
     if match:
         return match.group(1).strip()
     return "UNKNOWN"
@@ -62,25 +62,25 @@ def detect_speaker(line):
 # ==============================
 def extract_segments(paragraphs):
     entries = []
-    buffer_text = None
+    current_tc = None
 
     for line in paragraphs:
         text = line.strip()
         if not text:
             continue
 
-        # detect timecode
-        tc_match = re.match(r"\d{2}:\d{2}:\d{2}", text)
+        # Detect timecode
+        if re.match(r"\d{2}:\d{2}:\d{2}", text):
+            current_tc = text
+            continue
 
-        if tc_match:
-            if buffer_text:
-                speaker = detect_speaker(buffer_text)
-                entries.append((text, speaker, buffer_text))
-                buffer_text = None
-        else:
-            buffer_text = text
+        if current_tc:
+            speaker = detect_speaker(text)
+            entries.append((current_tc, speaker, text))
+            current_tc = None
 
     return entries
+
 
 # ==============================
 # ✅ QC CHECKS
@@ -92,87 +92,77 @@ def run_qc_checks(entries):
     for i, (tc, speaker, text) in enumerate(entries):
         parts = tc.split(":")
 
-        # ✅ Fix missing frames
         if len(parts) == 3:
             parts.append("00")
 
-        # ✅ Safe parsing
         try:
             h, m, s, f = map(int, parts)
         except:
-            errors.append(f"Line {i+1}: Invalid timecode format")
+            errors.append(f"Line {i+1}: Invalid timecode")
             continue
 
         current_time = h*3600 + m*60 + s
 
-        # ✅ Time overlap check
         if prev_time is not None and current_time < prev_time:
             errors.append(f"Line {i+1}: Time overlap detected")
 
         prev_time = current_time
 
-        # ✅ Speaker check
         if not speaker or speaker.strip().upper() == "UNKNOWN":
             errors.append(f"Line {i+1}: Speaker not detected")
 
-        # ✅ Empty text check
         if not text or not text.strip():
             errors.append(f"Line {i+1}: Empty text")
 
     return errors
 
-# ==============================
-# ✅ BUILD OUTPUT (BROADCAST STYLE)
-# ==============================
-from docx import Document
 
+# ==============================
+# ✅ BUILD OUTPUT (EXACT FORMAT)
+# ==============================
 def build_output_doc(entries, media_name, offset, fps):
     doc = Document()
 
-    # ✅ HEADER (exact format)
+    # HEADER
     doc.add_paragraph(f"Transcription Media #{media_name}")
     doc.add_paragraph(f"MEDIA #: {media_name}")
-    doc.add_paragraph("")  # spacing
+    doc.add_paragraph("")
 
     for raw_tc, speaker, text in entries:
 
-        # ✅ Apply offset
-        new_tc = offset_timecode(raw_tc, 0, offset, fps)
+        # Apply offset
+        new_tc = offset_timecode(raw_tc, offset, fps)
 
-        # remove frames if needed (match your format)
+        # Remove frames
         new_tc = new_tc.rsplit(":", 1)[0]
-
-        # ✅ FIX speaker duplication
-        if ":" in text:
-            text = text.split(":", 1)[-1].strip()
 
         speaker_clean = speaker.strip() if speaker else "UNKNOWN"
 
-        # ✅ BLOCK FORMAT (exact match)
-        # ✅ Remove duplicate speaker from text
-if ":" in text:
-    parts = text.split(":", 1)
-    if len(parts) > 1 and parts[0].strip().upper() == speaker_clean.strip().upper():
-        text = parts[1].strip()
+        # Remove duplicate speaker in text
+        if ":" in text:
+            parts = text.split(":", 1)
+            if len(parts) > 1 and parts[0].strip().upper() == speaker_clean.strip().upper():
+                text = parts[1].strip()
 
-# ✅ Clean speaker format (JACOB:LANDRY → JACOB LANDRY)
-speaker_clean = speaker_clean.replace(":", " ")
+        # Clean speaker format
+        speaker_clean = speaker_clean.replace(":", " ")
 
-# ✅ BLOCK FORMAT (exact match)
-doc.add_paragraph(f"[{media_name}]")
-doc.add_paragraph(f"[{new_tc}]")
-doc.add_paragraph(f"[{speaker_clean}]:{text}")
+        # FORMAT BLOCK
+        doc.add_paragraph(f"[{media_name}]")
+        doc.add_paragraph(f"[{new_tc}]")
+        doc.add_paragraph(f"[{speaker_clean}]:{text}")
 
-        # ✅ IMPORTANT spacing (this was missing)
-        doc.add_paragraph("")  
+        # spacing
+        doc.add_paragraph("")
 
     return doc
 
 
 # ==============================
-# ✅ MAIN RUN FUNCTION
+# ✅ MAIN FUNCTION
 # ==============================
 def run(input_path, output_path, media_name, offset_str, fps=25):
+
     if not validate_offset(offset_str):
         return {"errors": ["Invalid offset format. Use HH:MM:SS:FF"]}
 
@@ -190,7 +180,7 @@ def run(input_path, output_path, media_name, offset_str, fps=25):
     if qc_errors:
         return {"errors": qc_errors}
 
-    out_doc = build_output(entries, media_name, offset)
+    out_doc = build_output_doc(entries, media_name, offset, fps)
     out_doc.save(output_path)
 
     return {"success": True}
