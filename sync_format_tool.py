@@ -90,19 +90,36 @@ def run_qc_checks(entries):
     prev_time = None
 
     for i, (tc, speaker, text) in enumerate(entries):
-        h, m, s, f = map(int, tc.split(":"))
+        parts = tc.split(":")
+
+        # ✅ Fix missing frames
+        if len(parts) == 3:
+            parts.append("00")
+
+        # ✅ Safe parsing
+        try:
+            h, m, s, f = map(int, parts)
+        except:
+            errors.append(f"Line {i+1}: Invalid timecode format")
+            continue
+
         current_time = h*3600 + m*60 + s
 
+        # ✅ Time overlap check
         if prev_time is not None and current_time < prev_time:
             errors.append(f"Line {i+1}: Time overlap detected")
 
-        if not speaker or speaker == "UNKNOWN":
-            errors.append(f"Line {i+1}: Speaker not detected")
-
         prev_time = current_time
 
-    return errors
+        # ✅ Speaker check
+        if not speaker or speaker.strip().upper() == "UNKNOWN":
+            errors.append(f"Line {i+1}: Speaker not detected")
 
+        # ✅ Empty text check
+        if not text or not text.strip():
+            errors.append(f"Line {i+1}: Empty text")
+
+    return errors
 
 # ==============================
 # ✅ BUILD OUTPUT (BROADCAST STYLE)
