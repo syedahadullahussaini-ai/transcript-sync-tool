@@ -24,7 +24,7 @@ if st.button("Process"):
             result = run(input_path, output_path, media_name, offset, fps)
 
 # ✅ Show errors in UI
-    if isinstance(result, dict) and "errors" in result:
+if isinstance(result, dict) and "errors" in result:
     st.error("❌ Errors found:")
     for err in result["errors"]:
         st.write(f"- {err}")
