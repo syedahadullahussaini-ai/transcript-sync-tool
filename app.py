@@ -12,15 +12,13 @@ media_name = st.text_input("Media Name")
 offset = st.text_input("Offset (HH:MM:SS:FF)")
 fps = st.number_input("FPS", value=25)
 
-# Offset warning
+# ✅ Offset validation warning
 if offset and not validate_offset(offset):
     st.warning("⚠️ Offset format should be HH:MM:SS:FF")
 
 if st.button("Process"):
     if not uploaded_file:
         st.error("Please upload a file")
-    elif not media_name or not offset:
-        st.error("Please fill all fields")
     else:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
             tmp.write(uploaded_file.read())
@@ -37,10 +35,9 @@ if st.button("Process"):
                 st.write(f"- {err}")
             st.stop()
 
-        # ✅ Success
         st.success("✅ File processed successfully!")
 
-        # ✅ Preview
+        # ✅ Preview output
         doc = Document(output_path)
         preview_text = [para.text for para in doc.paragraphs[:10]]
 
