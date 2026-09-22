@@ -12,6 +12,8 @@ media_name = st.text_input("Media Name")
 offset = st.text_input("Offset (HH:MM:SS:FF)")
 fps = st.number_input("FPS", value=25)
 
+if offset and not validate_offset(offset):
+    st.warning("⚠️ Offset format should be HH:MM:SS:FF")
 if st.button("Process"):
     if uploaded_file:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
