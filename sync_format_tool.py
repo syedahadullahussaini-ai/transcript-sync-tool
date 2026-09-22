@@ -2,193 +2,58 @@ import re
 from docx import Document
 from docx.shared import Pt, RGBColor
 
-# ==============================
-# ✅ OFFSET VALIDATION
-# ==============================
-def validate_offset(offset_str):
-    pattern = r"^\d{1,2}:\d{2}:\d{2}:\d{2}$"
-    return re.match(pattern, offset_str) is not None
+BLOCK_MEDIA_RE = re.compile(r"^\[(.+)\]$")
+BLOCK_TC_RE = re.compile(r"^\[(\d{1,2}:\d{2}:\d{2}(?::\d{1,2})?)\]$")
 
 
-# ==============================
-# ✅ PARSE OFFSET
-# ==============================
-def parse_offset(offset_str):
-    h, m, s, f = map(int, offset_str.split(":"))
-    return h, m, s, f
-
-
-# ==============================
-# ✅ TIMECODE OFFSET
-# ==============================
-def offset_timecode(tc, offset, fps):
-    """tc: 'HH:MM:SS' or 'HH:MM:SS:FF'. fps is coerced to an int — the
-    frame math needs whole frames, and non-integer fps (23.98, 29.97...)
-    is treated as its rounded whole value (24, 30...)."""
-    fps = int(round(float(fps)))
-    parts = tc.split(":")
-
-    if len(parts) == 3:
-        parts.append("00")
-
-    try:
-        h, m, s, f = map(int, parts)
-    except ValueError:
-        return tc  # return original if bad format
-
-    oh, om, os_, of = offset
-
-    total_frames = (h * 3600 + m * 60 + s) * fps + f
-    offset_frames = (oh * 3600 + om * 60 + os_) * fps + of
-
-    new_total = total_frames + offset_frames
-
-    total_seconds, nf = divmod(new_total, fps)
-    nh = (total_seconds // 3600) % 24
-    nm = (total_seconds % 3600) // 60
-    ns = total_seconds % 60
-
-    # hour unpadded, minute/second/frame zero-padded to 2 digits
-    return f"{nh}:{nm:02d}:{ns:02d}:{nf:02d}"
-
-
-# ==============================
-# ✅ SPEAKER DETECTION
-# ==============================
-SPEAKER_RE_BRACKET = re.compile(r"^\[([^\]]+)\]:?\s*(.*)$")
-SPEAKER_RE_PLAIN = re.compile(r"^([A-Z][A-Za-z ]{0,30}):\s*(.*)$")
-
-
-def detect_speaker(line):
-    """Returns (speaker_or_None, remaining_text). speaker is None when the
-    line has no explicit 'SPEAKER:' or '[SPEAKER]:' prefix — the caller is
-    responsible for carrying the previous speaker forward in that case, so
-    a continuation line is never mislabeled UNKNOWN."""
-    match = SPEAKER_RE_BRACKET.match(line)
-    if match:
-        return match.group(1).strip(), match.group(2).strip()
-
-    match = SPEAKER_RE_PLAIN.match(line)
-    if match:
-        return match.group(1).strip(), match.group(2).strip()
-
-    return None, line
-
-
-# ==============================
-# ✅ EXTRACT SEGMENTS
-# ==============================
-TIMECODE_LINE_RE = re.compile(r"^\d{1,2}:\d{2}:\d{2}(:\d{1,2})?$")
-
-
-def extract_segments(paragraphs, merge_bundled=True):
+def parse_reference_blocks(lines):
     """
-    IMPORTANT: in these raw docs, a timecode line comes AFTER the dialogue
-    it belongs to, not before it — e.g.:
-
-        JACOB LANDRY: Ready? (NON-INTERVIEW)
-        00:00:02
-
-    So we buffer dialogue text as we see it, and only stamp it with a
-    timecode once the timecode paragraph actually appears. If more than
-    one dialogue paragraph piles up before the next timecode (a line with
-    no timecode of its own, immediately followed by one that does have
-    one), they get merged into a single entry when merge_bundled=True —
-    since the source never timestamped them separately, showing them as
-    two identical-timecode blocks would be misleading. Lines that already
-    each have their own timecode simply produce separate entries, even if
-    two of those timecodes happen to carry the same value.
+    Parses text already in the target [MEDIA] / [TIMECODE] / [SPEAKER] text
+    layout (optionally preceded by a 'MEDIA #: ...' header line) into a
+    list of (media_name, timecode, speaker_line_text) tuples. Blank lines
+    (or lines that are just whitespace) separate blocks.
     """
-    entries = []
-    buffered = []  # (speaker, text) not yet timed
-    current_speaker = None
+    body_label_line = None
+    blocks = []
+    cur = []
 
-    for line in paragraphs:
-        text = line.strip()
-        if not text:
+    def flush():
+        if not cur:
+            return
+        if len(cur) >= 3:
+            media = cur[0]
+            tc = cur[1]
+            speaker_line = " ".join(cur[2:])  # in case dialogue wrapped onto >1 line
+            blocks.append((media, tc, speaker_line))
+
+    for raw in lines:
+        line = raw.strip()
+        if line.upper().startswith("MEDIA #:"):
+            body_label_line = line
             continue
-
-        if TIMECODE_LINE_RE.match(text):
-            if buffered:
-                if merge_bundled and len(buffered) > 1:
-                    speakers = []
-                    for spk, _ in buffered:
-                        if spk not in speakers:
-                            speakers.append(spk)
-                    combined_text = " ".join(t for _, t in buffered)
-                    entries.append((text, " / ".join(speakers), combined_text))
-                else:
-                    for spk, txt in buffered:
-                        entries.append((text, spk, txt))
-                buffered = []
+        if not line:
+            flush()
+            cur = []
             continue
+        cur.append(line)
+    flush()
 
-        speaker, dialogue = detect_speaker(text)
-        if speaker is not None:
-            current_speaker = speaker
-        # If no speaker was ever established (first line has no prefix),
-        # fall back to UNKNOWN rather than crashing/erroring.
-        buffered.append((current_speaker or "UNKNOWN", dialogue))
-
-    # any text left in `buffered` at end-of-doc had no trailing timecode;
-    # it's intentionally dropped from entries (nothing to stamp it with)
-    return entries
+    return body_label_line, blocks
 
 
-# ==============================
-# ✅ QC CHECKS  (now non-fatal — returns warnings, never blocks output)
-# ==============================
-def run_qc_checks(entries):
-    warnings = []
-    prev_time = None
+def build_doc_from_reference(lines, media_name=None,
+                              running_header_label="Transcription Media #",
+                              body_label="MEDIA #:"):
+    body_label_line, blocks = parse_reference_blocks(lines)
+    if not blocks:
+        raise ValueError("No [MEDIA]/[TIMECODE]/[SPEAKER] blocks found in the input")
 
-    for i, (tc, speaker, text) in enumerate(entries):
-        parts = tc.split(":")
-        if len(parts) == 3:
-            parts.append("00")
-        try:
-            h, m, s, f = map(int, parts)
-        except ValueError:
-            warnings.append(f"Line {i+1}: Invalid timecode")
-            continue
+    # media name: prefer explicit arg, else pull from the first bracketed line
+    if media_name is None:
+        m = BLOCK_MEDIA_RE.match(blocks[0][0])
+        media_name = m.group(1) if m else blocks[0][0]
 
-        current_time = h * 3600 + m * 60 + s
-        if prev_time is not None and current_time < prev_time:
-            warnings.append(f"Line {i+1}: Timecode goes backwards")
-        prev_time = current_time
-
-        if not speaker or speaker.strip().upper() == "UNKNOWN":
-            warnings.append(f"Line {i+1}: Speaker not detected")
-
-        if not text or not text.strip():
-            warnings.append(f"Line {i+1}: Empty text")
-
-    return warnings
-
-
-# ==============================
-# ✅ SPEAKER LABEL FORMATTING
-# ==============================
-def format_speaker_label(speaker):
-    """[Q] gets a trailing colon ('[Q]:'), everything else doesn't
-    ('[CREW]', '[JACOB LANDRY]'), matching house style. Merged
-    multi-speaker labels ('A / B') are upper-cased piece by piece."""
-    parts = [p.strip() for p in speaker.split("/")]
-    upped = [p.upper() for p in parts]
-    label = " / ".join(upped)
-    if label == "Q":
-        return f"[Q]:"
-    return f"[{label}]"
-
-
-# ==============================
-# ✅ BUILD OUTPUT (matches the validated reference layout)
-# ==============================
-def build_output_doc(entries, media_name, offset, fps,
-                      running_header_label="Transcription Media #",
-                      body_label="MEDIA #:"):
     doc = Document()
-
     section = doc.sections[0]
     section.page_width = Pt(612)
     section.page_height = Pt(792)
@@ -228,51 +93,21 @@ def build_output_doc(entries, media_name, offset, fps,
 
     add_para(media_name, bold_prefix=body_label)
 
-    for raw_tc, speaker, text in entries:
-        new_tc = offset_timecode(raw_tc, offset, fps)
-        speaker_clean = (speaker or "UNKNOWN").strip()
-
-        # strip a duplicated "SPEAKER: " prefix already inside the text
-        if ":" in text:
-            head, _, rest = text.partition(":")
-            if head.strip().upper() == speaker_clean.upper():
-                text = rest.strip()
-
-        add_para(f"[{media_name}]")
-        add_para(f"[{new_tc}]")
-        label = format_speaker_label(speaker_clean)
-        sep = " " if not label.endswith(":") else " "
-        add_para(f"{label}{sep}{text}")
+    for media_line, tc_line, speaker_line in blocks:
+        add_para(media_line)
+        add_para(tc_line)
+        add_para(speaker_line)
         doc.add_paragraph("")
 
     return doc
 
 
-# ==============================
-# ✅ MAIN FUNCTION
-# ==============================
-def run(input_path, output_path, media_name, offset_str, fps=25):
-    if not validate_offset(offset_str):
-        return {"success": False, "errors": ["Invalid offset format. Use HH:MM:SS:FF"]}
-
-    offset = parse_offset(offset_str)
-
-    doc = Document(input_path)
-    paragraphs = [p.text for p in doc.paragraphs]
-
-    entries = extract_segments(paragraphs)
-
-    if not entries:
-        return {"success": False, "errors": ["No valid transcript entries found"]}
-
-    # QC issues are surfaced as warnings, not a hard stop — a raw doc with
-    # an odd line or two shouldn't block the whole file from being produced.
-    warnings = run_qc_checks(entries)
-
-    out_doc = build_output_doc(entries, media_name, offset, fps)
-    out_doc.save(output_path)
-
-    result = {"success": True, "entries": len(entries)}
-    if warnings:
-        result["warnings"] = warnings
-    return result
+if __name__ == "__main__":
+    import sys
+    in_path = sys.argv[1]
+    out_path = sys.argv[2]
+    with open(in_path, encoding="utf-8") as f:
+        lines = f.readlines()
+    doc = build_doc_from_reference(lines)
+    doc.save(out_path)
+    print(f"Wrote {out_path}")
