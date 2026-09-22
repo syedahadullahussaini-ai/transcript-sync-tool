@@ -37,7 +37,7 @@ if st.button("Process"):
 
         st.success("✅ File processed successfully!")
 
-        # ✅ Preview output
+        # ✅ Preview
         doc = Document(output_path)
         preview_text = [para.text for para in doc.paragraphs[:10]]
 
