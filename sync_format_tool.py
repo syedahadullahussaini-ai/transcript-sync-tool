@@ -124,16 +124,38 @@ def run_qc_checks(entries):
 # ==============================
 # ✅ BUILD OUTPUT (BROADCAST STYLE)
 # ==============================
-def build_output(entries, media_name, offset):
+from docx import Document
+
+def build_output_doc(entries, media_name, offset, fps):
     doc = Document()
 
-    for tc, speaker, text in entries:
-        new_tc = apply_offset(tc, offset)
+    # ✅ HEADER (exact format)
+    doc.add_paragraph(f"Transcription Media #{media_name}")
+    doc.add_paragraph(f"MEDIA #: {media_name}")
+    doc.add_paragraph("")  # spacing
 
+    for raw_tc, speaker, text in entries:
+
+        # ✅ Apply offset
+        new_tc = offset_timecode(raw_tc, 0, offset, fps)
+
+        # remove frames if needed (match your format)
+        new_tc = new_tc.rsplit(":", 1)[0]
+
+        # ✅ FIX speaker duplication
+        if ":" in text:
+            text = text.split(":", 1)[-1].strip()
+
+        speaker_clean = speaker.strip() if speaker else "UNKNOWN"
+
+        # ✅ BLOCK FORMAT (exact match)
         doc.add_paragraph(f"[{media_name}]")
         doc.add_paragraph(f"[{new_tc}]")
-        doc.add_paragraph(f"[{speaker}] {text}")
-    
+        doc.add_paragraph(f"[{speaker_clean}]:{text}")
+
+        # ✅ IMPORTANT spacing (this was missing)
+        doc.add_paragraph("")  
+
     return doc
 
 
