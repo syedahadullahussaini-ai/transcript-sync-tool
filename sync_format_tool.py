@@ -263,6 +263,10 @@ def run_qc_checks(entries):
         prev_time = current_time
 
     return errors
+def validate_offset(offset_str):
+    import re
+    pattern = r"^\d{2}:\d{2}:\d{2}:\d{2}$"
+    return re.match(pattern, offset_str)
 
 def run(input_path, output_path, media_name, offset_str, fps=30, speakers=None,
         running_header_label="Transcription Media #", body_label="MEDIA #:",
@@ -288,7 +292,10 @@ if qc_errors:
               f"following timecode and were skipped:")
         for spk, txt in leftover:
             print(f"  [{spk}] {txt[:60]}")
+if not validate_offset(offset_str):
+    return {"errors": ["Invalid offset format. Use HH:MM:SS:FF"]}
 
+offset = parse_offset(offset_str)
     offset = parse_offset(offset_str)
     if offset[3] >= fps:
         print(f"WARNING: offset frame value {offset[3]} is >= fps ({fps}); "
