@@ -55,31 +55,25 @@ def detect_speaker(line):
 # ==============================
 def extract_segments(paragraphs):
     entries = []
-    current_tc = None
+    buffer_text = None
 
-    for para in paragraphs:
-        text = para.strip()
+    for line in paragraphs:
+        text = line.strip()
         if not text:
             continue
 
-        # 🔍 Detect timecode anywhere in line
-        tc_match = re.search(r"\d{2}:\d{2}:\d{2}:\d{2}", text)
+        # detect timecode
+        tc_match = re.match(r"\d{2}:\d{2}:\d{2}", text)
 
         if tc_match:
-            current_tc = tc_match.group()
-            # remove timecode from text if same line
-            text = text.replace(current_tc, "").strip()
-
-            if text:
-                speaker = detect_speaker(text)
-                entries.append((current_tc, speaker, text))
-
-        elif current_tc:
-            speaker = detect_speaker(text)
-            entries.append((current_tc, speaker, text))
+            if buffer_text:
+                speaker = detect_speaker(buffer_text)
+                entries.append((text, speaker, buffer_text))
+                buffer_text = None
+        else:
+            buffer_text = text
 
     return entries
-
 
 # ==============================
 # ✅ QC CHECKS
@@ -109,15 +103,13 @@ def run_qc_checks(entries):
 def build_output(entries, media_name, offset):
     doc = Document()
 
-    for i, (tc, speaker, text) in enumerate(entries, start=1):
+    for tc, speaker, text in entries:
         new_tc = apply_offset(tc, offset)
 
-        # 🔥 Broadcast style (matches your format)
-        doc.add_paragraph(f"{media_name} {i}")
-        doc.add_paragraph(new_tc)
-        doc.add_paragraph(f"{speaker}: {text}")
-        doc.add_paragraph("")  # spacing
-
+        doc.add_paragraph(f"[{media_name}]")
+        doc.add_paragraph(f"[{new_tc}]")
+        doc.add_paragraph(f"[{speaker}] {text}")
+    
     return doc
 
 
