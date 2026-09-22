@@ -20,12 +20,11 @@ if st.button("Process"):
             tmp.write(uploaded_file.read())
             input_path = tmp.name
 
-        output_path = input_path.replace(".docx", "_output.docx")
-
-       result = run(input_path, output_path, media_name, offset, fps)
+            output_path = input_path.replace(".docx", "_output.docx")
+            result = run(input_path, output_path, media_name, offset, fps)
 
 # ✅ Show errors in UI
-if isinstance(result, dict) and "errors" in result:
+    if isinstance(result, dict) and "errors" in result:
     st.error("❌ Errors found:")
     for err in result["errors"]:
         st.write(f"- {err}")
