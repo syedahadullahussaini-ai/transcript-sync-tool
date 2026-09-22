@@ -1,7 +1,7 @@
 import streamlit as st
 import tempfile
 import os
-from sync_format_tool import run, validate_offset
+from sync_format_tool import run
 from docx import Document
 
 st.title("🎬 Transcript Sync Tool")
@@ -11,10 +11,6 @@ uploaded_file = st.file_uploader("Upload DOCX", type=["docx"])
 media_name = st.text_input("Media Name")
 offset = st.text_input("Offset (HH:MM:SS:FF)")
 fps = st.number_input("FPS", value=25)
-
-# ✅ Offset warning
-if offset and not validate_offset(offset):
-    st.warning("⚠️ Offset format should be HH:MM:SS:FF")
 
 if st.button("🚀 Process"):
     if not uploaded_file:
