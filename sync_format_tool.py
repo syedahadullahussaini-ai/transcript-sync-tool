@@ -50,10 +50,17 @@ def offset_timecode(tc, offset, fps):
 # ==============================
 # ✅ SPEAKER DETECTION
 # ==============================
-def detect_speaker(text):
-    match = re.match(r"^([A-Za-z :]+):", text)
+def detect_speaker(line):
+    # ✅ Case 1: [SPEAKER]: text
+    match = re.match(r"^\[([^\]]+)\]:", line)
     if match:
         return match.group(1).strip()
+
+    # ✅ Case 2: SPEAKER: text
+    match = re.match(r"^([A-Za-z ]+):", line)
+    if match:
+        return match.group(1).strip()
+
     return "UNKNOWN"
 
 
