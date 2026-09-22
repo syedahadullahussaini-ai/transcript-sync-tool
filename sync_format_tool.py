@@ -59,13 +59,22 @@ def extract_segments(paragraphs):
 
     for para in paragraphs:
         text = para.strip()
+        if not text:
+            continue
 
-        # detect timecode
+        # 🔍 Detect timecode anywhere in line
         tc_match = re.search(r"\d{2}:\d{2}:\d{2}:\d{2}", text)
+
         if tc_match:
             current_tc = tc_match.group()
+            # remove timecode from text if same line
+            text = text.replace(current_tc, "").strip()
 
-        elif text and current_tc:
+            if text:
+                speaker = detect_speaker(text)
+                entries.append((current_tc, speaker, text))
+
+        elif current_tc:
             speaker = detect_speaker(text)
             entries.append((current_tc, speaker, text))
 
