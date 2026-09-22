@@ -149,9 +149,19 @@ def build_output_doc(entries, media_name, offset, fps):
         speaker_clean = speaker.strip() if speaker else "UNKNOWN"
 
         # ✅ BLOCK FORMAT (exact match)
-        doc.add_paragraph(f"[{media_name}]")
-        doc.add_paragraph(f"[{new_tc}]")
-        doc.add_paragraph(f"[{speaker_clean}]:{text}")
+        # ✅ Remove duplicate speaker from text
+if ":" in text:
+    parts = text.split(":", 1)
+    if len(parts) > 1 and parts[0].strip().upper() == speaker_clean.strip().upper():
+        text = parts[1].strip()
+
+# ✅ Clean speaker format (JACOB:LANDRY → JACOB LANDRY)
+speaker_clean = speaker_clean.replace(":", " ")
+
+# ✅ BLOCK FORMAT (exact match)
+doc.add_paragraph(f"[{media_name}]")
+doc.add_paragraph(f"[{new_tc}]")
+doc.add_paragraph(f"[{speaker_clean}]:{text}")
 
         # ✅ IMPORTANT spacing (this was missing)
         doc.add_paragraph("")  
