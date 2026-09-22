@@ -66,6 +66,10 @@ Optional:
 
 import argparse
 import re
+def validate_offset(offset_str):
+    pattern = r"^\d{2}:\d{2}:\d{2}:\d{2}$"
+    return re.match(pattern, offset_str)
+
 from docx import Document
 from docx.shared import Pt, RGBColor
 
