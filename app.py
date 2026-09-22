@@ -1,7 +1,8 @@
 import streamlit as st
 import tempfile
 import os
-from sync_format_tool import run
+from sync_format_tool import run, validate_offset
+from docx import Document
 
 st.title("Transcript Sync Tool")
 
