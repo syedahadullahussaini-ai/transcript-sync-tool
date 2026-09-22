@@ -21,7 +21,14 @@ def parse_offset(offset_str):
 # ✅ TIMECODE FIX (AUTO CORRECTION)
 # ==============================
 def apply_offset(tc, offset):
-    h, m, s, f = map(int, tc.split(":"))
+    parts = tc.split(":")
+
+    # ✅ Fix missing frames (HH:MM:SS → HH:MM:SS:00)
+    if len(parts) == 3:
+        parts.append("00")
+
+    h, m, s, f = map(int, parts)
+
     oh, om, os, of = offset
 
     total_frames = (h*3600 + m*60 + s)*25 + f
@@ -37,7 +44,7 @@ def apply_offset(tc, offset):
     new_m = new_s // 60
     new_s %= 60
 
-    return f"{new_h:02}:{new_m:02}:{new_s:02}:{new_f:02}"
+    return f"{new_h}:{new_m:02}:{new_s:02}:{new_f:02}"
 
 
 # ==============================
