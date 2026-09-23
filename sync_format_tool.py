@@ -163,11 +163,15 @@ def build_output(entries, media_name, offset, fps):
     header.is_linked_to_previous = False
     hp = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
     hp.text = ""
-    hr = hp.add_run(f"Transcription Media # {media_name}")
-    hr.bold = True
-    hr.font.name = "Arial Bold"
-    hr.font.size = Pt(12)
-    hr.font.color.rgb = RGBColor(0xC0, 0xC0, 0xC0)
+    # Split into two runs (label / value) to match the reference doc's run
+    # structure exactly, rather than one merged run.
+    hr1 = hp.add_run("Transcription Media # ")
+    hr2 = hp.add_run(media_name)
+    for hr in (hr1, hr2):
+        hr.bold = True
+        hr.font.name = "Arial Bold"
+        hr.font.size = Pt(12)
+        hr.font.color.rgb = RGBColor(0xC0, 0xC0, 0xC0)
     hp.paragraph_format.space_after = Pt(0)
     hp.paragraph_format.line_spacing = 1.0
 
@@ -178,9 +182,13 @@ def build_output(entries, media_name, offset, fps):
             r1.bold = True
             r1.font.name = "Arial"
             r1.font.size = Pt(12)
-            r2 = p.add_run(" " + text)
+            # Space and value as separate runs, matching the reference doc.
+            r2 = p.add_run(" ")
             r2.font.name = "Arial"
             r2.font.size = Pt(12)
+            r3 = p.add_run(text)
+            r3.font.name = "Arial"
+            r3.font.size = Pt(12)
         else:
             r = p.add_run(text)
             r.font.name = "Arial"
@@ -188,9 +196,18 @@ def build_output(entries, media_name, offset, fps):
         p.paragraph_format.line_spacing = 1.0
         return p
 
+    def add_blank():
+        # Blank spacer paragraphs get the same line spacing as every other
+        # paragraph in the reference doc -- previously these were left at
+        # the document default, which is a formatting mismatch.
+        p = doc.add_paragraph("")
+        p.paragraph_format.line_spacing = 1.0
+        return p
+
     add_para(media_name, bold_prefix="MEDIA #:")
 
-    for speaker, text, tc in entries:
+    last_index = len(entries) - 1
+    for i, (speaker, text, tc) in enumerate(entries):
         h, m, s, f = tc
         raw_frames = timecode_to_frames(h, m, s, f, fps)
         out_tc = frames_to_timecode(raw_frames + offset_frames, fps)
@@ -205,7 +222,10 @@ def build_output(entries, media_name, offset, fps):
         else:
             add_para(text)
 
-        doc.add_paragraph("")
+        # Reference doc has a blank spacer between entries, but NOT a
+        # trailing blank paragraph after the very last entry.
+        if i != last_index:
+            add_blank()
 
     return doc
 
